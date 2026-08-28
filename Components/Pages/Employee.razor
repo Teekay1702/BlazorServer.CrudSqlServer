@@ -1,0 +1,63 @@
+﻿@page "/employee"
+@using BlazorServer.CrudSqlServer.Services
+@using BlazorServer.CrudSqlServer.Models
+@rendermode InteractiveServer
+@inject EmployeeService employeeService
+@using EmployeeModel = BlazorServer.CrudSqlServer.Models.Employee
+
+<h3>Employee Management</h3>
+
+<div class="mb-2">
+    <input placeholder="Name" @bind="employee.Name" />
+</div>
+
+<div class="mb-2">
+    <input placeholder="Email" @bind="employee.Email" />
+</div>
+
+<div class="mb-2">
+    <input placeholder="Position" @bind="employee.Position" />
+</div>
+
+<button @onclick="SaveEmployee">Save</button>
+
+<hr />
+
+<h4>Employee List</h4>
+
+@if (employees == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <ul>
+        @foreach (var emp in employees)
+        {
+            <li>@emp.Name - @emp.Email - @emp.Position</li>
+        }
+    </ul>
+}
+
+@code {
+    private EmployeeModel employee = new EmployeeModel();
+    private List<EmployeeModel> employees = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEmployees();
+    }
+
+    private async Task LoadEmployees()
+    {
+        employees = await employeeService.GetAll();
+    }
+
+    private async Task SaveEmployee()
+    {
+        await employeeService.Add(employee);
+
+        employee = new EmployeeModel(); // reset form
+        await LoadEmployees();     // refresh list
+    }
+}
