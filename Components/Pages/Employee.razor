@@ -1,4 +1,5 @@
 ﻿@page "/employee"
+
 @using BlazorServer.CrudSqlServer.Services
 @using BlazorServer.CrudSqlServer.Models
 @rendermode InteractiveServer
@@ -19,7 +20,15 @@
     <input placeholder="Position" @bind="employee.Position" />
 </div>
 
-<button @onclick="SaveEmployee">Save</button>
+@if (isEditing)
+{
+    <button @onclick="UpdateEmployee">Update</button>
+    <button @onclick="CancelEdit">Cancel</button>
+}
+else
+{
+    <button @onclick="SaveEmployee">Save</button>
+}
 
 <hr />
 
@@ -29,35 +38,112 @@
 {
     <p>Loading...</p>
 }
+else if (!employees.Any())
+{
+    <p>No employees found.</p>
+}
 else
 {
-    <ul>
-        @foreach (var emp in employees)
-        {
-            <li>@emp.Name - @emp.Email - @emp.Position</li>
-        }
-    </ul>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Position</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            @foreach (var emp in employees)
+            {
+                <tr>
+                    <td>@emp.Name</td>
+                    <td>@emp.Email</td>
+                    <td>@emp.Position</td>
+                    <td>
+                        <button @onclick="() => EditEmployee(emp)">
+                            Edit
+                        </button>
+
+                        <button @onclick="() => DeleteEmployee(emp.Id)">
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
 }
 
 @code {
     private EmployeeModel employee = new EmployeeModel();
+
     private List<EmployeeModel> employees = new();
+
+    private bool isEditing = false;
+
 
     protected override async Task OnInitializedAsync()
     {
         await LoadEmployees();
     }
 
+
     private async Task LoadEmployees()
     {
         employees = await employeeService.GetAll();
     }
 
+
     private async Task SaveEmployee()
     {
         await employeeService.Add(employee);
 
-        employee = new EmployeeModel(); // reset form
-        await LoadEmployees();     // refresh list
+        employee = new EmployeeModel();
+
+        await LoadEmployees();
+    }
+
+
+    private void EditEmployee(EmployeeModel emp)
+    {
+        employee = new EmployeeModel
+        {
+            Id = emp.Id,
+            Name = emp.Name,
+            Email = emp.Email,
+            Position = emp.Position
+        };
+
+        isEditing = true;
+    }
+
+
+    private async Task UpdateEmployee()
+    {
+        await employeeService.Update(employee);
+
+        employee = new EmployeeModel();
+
+        isEditing = false;
+
+        await LoadEmployees();
+    }
+
+
+    private void CancelEdit()
+    {
+        employee = new EmployeeModel();
+
+        isEditing = false;
+    }
+
+
+    private async Task DeleteEmployee(int id)
+    {
+        await employeeService.Delete(id);
+
+        await LoadEmployees();
     }
 }

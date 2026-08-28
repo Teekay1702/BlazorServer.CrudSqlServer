@@ -15,7 +15,7 @@ namespace BlazorServer.CrudSqlServer.Services
 
         public async Task <List<Employee>> GetAll()
         {
-            return await _context.Employees.ToListAsync();
+            return await _context.Employees.AsNoTracking().ToListAsync();
         }
 
         public async Task Add(Employee employee)
