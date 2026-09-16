@@ -1,0 +1,229 @@
+@page "/users"
+@using Microsoft.AspNetCore.Identity
+@using BlazorServer.CrudSqlServer.Models
+@using BlazorServer.CrudSqlServer.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Authorize(Roles = "Admin")]
+@inject UserManager<User> UserManager
+@inject RoleManager<IdentityRole> RoleManager
+@inject AppDbContext DbContext
+@rendermode InteractiveServer
+
+<PageTitle>User Management</PageTitle>
+
+<h3>User & Role Management</h3>
+<p class="text-muted">Admin only - manage accounts, roles, link to employees</p>
+
+<div class="card mb-4">
+    <div class="card-header">All Users (@users.Count)</div>
+    <div class="card-body">
+        @if (isLoading)
+        {
+            <p><em>Loading...</em></p>
+        }
+        else
+        {
+            <table class="table table-striped">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Email</th>
+                        <th>Full Name</th>
+                        <th>Employee</th>
+                        <th>Dept</th>
+                        <th>Roles</th>
+                        <th>Active</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var u in users)
+                    {
+                        <tr>
+                            <td><strong>@u.Email</strong><br/><small class="text-muted">@u.Id.Substring(0,8)...</small></td>
+                            <td>@u.FullName</td>
+                            <td>@(u.Employee?.Name ?? "-")<br/><small class="text-muted">@(u.Employee?.EmployeeCode ?? "")</small></td>
+                            <td><span class="badge bg-secondary">@(u.Department?.Name ?? "-")</span></td>
+                            <td>
+                                @foreach (var role in userRoles.GetValueOrDefault(u.Id, new List<string>()))
+                                {
+                                    <span class="badge bg-primary me-1">@role</span>
+                                }
+                            </td>
+                            <td>
+                                @if (u.IsActive) { <span class="badge bg-success">Active</span> } else { <span class="badge bg-danger">Inactive</span> }
+                                @if (u.EmailConfirmed) { <span class="badge bg-info">Confirmed</span> }
+                            </td>
+                            <td>@u.CreatedAt.ToString("yyyy-MM-dd")</td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary" @onclick="() => EditUser(u)">Edit</button>
+                                    <button class="btn btn-outline-danger" @onclick="() => DeleteUser(u.Id)" disabled="@(u.Email == "admin@hrsystem.local")">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@if (editingUser != null)
+{
+    <div class="card mb-4">
+        <div class="card-header">Edit User - @editingUser.Email</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Full Name</label>
+                    <input class="form-control" @bind="editingUser.FullName" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Employee Link</label>
+                    <select class="form-select" @bind="editEmployeeId">
+                        <option value="">-- None --</option>
+                        @foreach (var emp in employees)
+                        {
+                            <option value="@emp.Id">@emp.EmployeeCode - @emp.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Department</label>
+                    <select class="form-select" @bind="editDeptId">
+                        <option value="">-- None --</option>
+                        @foreach (var dept in departments)
+                        {
+                            <option value="@dept.Id">@dept.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Active</label>
+                    <div class="form-check mt-2">
+                        <input type="checkbox" class="form-check-input" @bind="editingUser.IsActive" />
+                        <label class="form-check-label">Is Active</label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Roles (comma separated: Admin,HRManager,Manager,Employee)</label>
+                    <input class="form-control" @bind="editRoles" placeholder="Employee,Manager" />
+                </div>
+            </div>
+            <div class="mt-3">
+                <button class="btn btn-primary me-2" @onclick="SaveUser">Save</button>
+                <button class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
+            </div>
+            @if (!string.IsNullOrEmpty(message))
+            {
+                <div class="alert @(isError ? "alert-danger" : "alert-success") mt-3">@message</div>
+            }
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="card-header">Roles (@roles.Count)</div>
+    <div class="card-body">
+        <div class="d-flex gap-2 flex-wrap">
+            @foreach (var r in roles)
+            {
+                <span class="badge bg-dark">@r.Name - @r.Id.Substring(0,6)</span>
+            }
+        </div>
+        <p class="mt-3 text-muted">Roles: Admin (full access), HRManager (HR operations), Manager (team view), Employee (self-service)</p>
+    </div>
+</div>
+
+@code {
+    private List<User> users = new();
+    private List<IdentityRole> roles = new();
+    private Dictionary<string, List<string>> userRoles = new();
+    private List<Employee> employees = new();
+    private List<Department> departments = new();
+    private bool isLoading = true;
+    private User? editingUser = null;
+    private string editEmployeeId = string.Empty;
+    private string editDeptId = string.Empty;
+    private string editRoles = string.Empty;
+    private string message = string.Empty;
+    private bool isError = false;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            users = await DbContext.Users.Include(u => u.Employee).Include(u => u.Department).AsNoTracking().OrderBy(u => u.Email).ToListAsync();
+            roles = await RoleManager.Roles.ToListAsync();
+            employees = await DbContext.Employees.AsNoTracking().OrderBy(e => e.Name).ToListAsync();
+            departments = await DbContext.Departments.AsNoTracking().OrderBy(d => d.Name).ToListAsync();
+            userRoles.Clear();
+            foreach (var u in users)
+            {
+                var r = await UserManager.GetRolesAsync(u);
+                userRoles[u.Id] = r.ToList();
+            }
+        }
+        finally { isLoading = false; }
+    }
+
+    private async Task EditUser(User u)
+    {
+        editingUser = await DbContext.Users.FirstOrDefaultAsync(x => x.Id == u.Id);
+        if (editingUser != null)
+        {
+            editEmployeeId = editingUser.EmployeeId?.ToString() ?? "";
+            editDeptId = editingUser.DepartmentId?.ToString() ?? "";
+            var r = await UserManager.GetRolesAsync(editingUser);
+            editRoles = string.Join(",", r);
+            message = string.Empty;
+        }
+    }
+
+    private void CancelEdit(){ editingUser = null; message = string.Empty; }
+
+    private async Task SaveUser()
+    {
+        try
+        {
+            if (editingUser == null) return;
+            editingUser.EmployeeId = string.IsNullOrEmpty(editEmployeeId) ? null : int.Parse(editEmployeeId);
+            editingUser.DepartmentId = string.IsNullOrEmpty(editDeptId) ? null : int.Parse(editDeptId);
+            DbContext.Users.Update(editingUser);
+            await DbContext.SaveChangesAsync();
+
+            // Update roles
+            var currentRoles = await UserManager.GetRolesAsync(editingUser);
+            await UserManager.RemoveFromRolesAsync(editingUser, currentRoles);
+            var newRoles = editRoles.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(r => r.Trim()).ToArray();
+            if (newRoles.Length > 0)
+            {
+                await UserManager.AddToRolesAsync(editingUser, newRoles);
+            }
+
+            message = $"User {editingUser.Email} updated!";
+            isError = false;
+            editingUser = null;
+            await LoadData();
+        }
+        catch (Exception ex){ message = $"Error: {ex.Message}"; isError = true; }
+    }
+
+    private async Task DeleteUser(string id)
+    {
+        try
+        {
+            var user = await UserManager.FindByIdAsync(id);
+            if (user != null)
+            {
+                await UserManager.DeleteAsync(user);
+                await LoadData();
+            }
+        }
+        catch (Exception ex){ message = $"Error: {ex.Message}"; isError = true; }
+    }
+}

@@ -1,0 +1,13 @@
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@page "/access-denied"
+<PageTitle>Access Denied</PageTitle>
+
+<div class="container mt-5">
+    <div class="alert alert-danger">
+        <h4>Access Denied</h4>
+        <p>You do not have permission to view this resource.</p>
+        <p>Required roles: Admin, HRManager, or Manager.</p>
+        <a href="/" class="btn btn-primary">Back to Dashboard</a>
+        <a href="login" class="btn btn-secondary">Sign in with different account</a>
+    </div>
+</div>

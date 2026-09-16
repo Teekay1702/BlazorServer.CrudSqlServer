@@ -1,6 +1,6 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">BlazorServer.CrudSqlServer</a>
+        <a class="navbar-brand" href="">HR System</a>
     </div>
 </div>
 
@@ -10,27 +10,89 @@
     <nav class="flex-column">
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Dashboard
             </NavLink>
         </div>
 
-        @* <div class="nav-item px-3"> *@
-        @*     <NavLink class="nav-link" href="counter"> *@
-        @*         <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter *@
-        @*     </NavLink> *@
-        @* </div> *@
+        <AuthorizeView>
+            <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="employee">
+                        <span class="bi bi-people-fill" aria-hidden="true"></span> Employees
+                    </NavLink>
+                </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="employee">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Employee
-            </NavLink>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="departments">
+                        <span class="bi bi-building" aria-hidden="true"></span> Departments
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="salaries">
+                        <span class="bi bi-cash-stack" aria-hidden="true"></span> Salaries
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="leaves">
+                        <span class="bi bi-calendar-x" aria-hidden="true"></span> Leave
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="attendances">
+                        <span class="bi bi-clock-history" aria-hidden="true"></span> Attendance
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="payrolls">
+                        <span class="bi bi-receipt" aria-hidden="true"></span> Payroll
+                    </NavLink>
+                </div>
+
+                <AuthorizeView Roles="Admin" Context="adminContext">
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="users">
+                            <span class="bi bi-shield-lock" aria-hidden="true"></span> Users & Roles
+                        </NavLink>
+                    </div>
+                </AuthorizeView>
+            </Authorized>
+        </AuthorizeView>
+
+        <div class="nav-item px-3 mt-4">
+            <hr class="text-white" />
+            <AuthorizeView>
+                <Authorized>
+                    <div class="px-3 py-2 text-white bg-dark bg-opacity-50 rounded mx-2 mb-2">
+                        <small class="text-white-50">Signed in as</small><br />
+                        <strong class="text-truncate d-block" style="max-width: 180px;">@context.User.Identity?.Name</strong>
+                        <small class="badge bg-info mt-1">@string.Join(", ", context.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value))</small>
+                    </div>
+
+                    <!-- Prominent Sign Out Button -->
+                    <div class="px-3">
+                        <form method="post" action="/account/logout">
+                            <button type="submit"
+                                    class="btn btn-danger w-100 d-flex align-items-center justify-content-center gap-2">
+                                <span class="bi bi-box-arrow-right" aria-hidden="true"></span>
+                                Sign Out
+                            </button>
+                        </form>
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <NavLink class="nav-link" href="login">
+                        <span class="bi bi-box-arrow-in-right" aria-hidden="true"></span> Sign In
+                    </NavLink>
+                    <NavLink class="nav-link" href="register">
+                        <span class="bi bi-person-plus" aria-hidden="true"></span> Register
+                    </NavLink>
+                </NotAuthorized>
+            </AuthorizeView>
         </div>
-
-        @* <div class="nav-item px-3"> *@
-        @*     <NavLink class="nav-link" href="weather"> *@
-        @*         <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather *@
-        @*     </NavLink> *@
-        @* </div> *@
     </nav>
 </div>
 

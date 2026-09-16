@@ -1,0 +1,183 @@
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@page "/register"
+@using Microsoft.AspNetCore.Identity
+@using BlazorServer.CrudSqlServer.Models
+@using BlazorServer.CrudSqlServer.Data
+@using Microsoft.EntityFrameworkCore
+@inject UserManager<User> UserManager
+@inject SignInManager<User> SignInManager
+@inject NavigationManager Navigation
+@inject AppDbContext DbContext
+@rendermode InteractiveServer
+
+<PageTitle>Register - HR System</PageTitle>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0">Create HR Account</h4>
+                </div>
+                <div class="card-body">
+                    <EditForm Model="registerModel" OnValidSubmit="HandleRegister" FormName="register">
+                        <DataAnnotationsValidator />
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Full Name *</label>
+                                <InputText class="form-control" @bind-Value="registerModel.FullName" placeholder="John Doe" />
+                                <ValidationMessage For="() => registerModel.FullName" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Email *</label>
+                                <InputText class="form-control" @bind-Value="registerModel.Email" placeholder="john@company.com" />
+                                <ValidationMessage For="() => registerModel.Email" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Password *</label>
+                                <InputText type="password" class="form-control" @bind-Value="registerModel.Password" />
+                                <ValidationMessage For="() => registerModel.Password" />
+                                <small class="text-muted">Min 6 chars, upper, lower, digit</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Confirm Password *</label>
+                                <InputText type="password" class="form-control" @bind-Value="registerModel.ConfirmPassword" />
+                                <ValidationMessage For="() => registerModel.ConfirmPassword" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Link to Employee (optional)</label>
+                                <InputSelect class="form-select" @bind-Value="registerModel.EmployeeId">
+                                    <option value="">-- No link --</option>
+                                    @foreach (var emp in employees)
+                                    {
+                                        <option value="@emp.Id">@emp.EmployeeCode - @emp.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Department (optional)</label>
+                                <InputSelect class="form-select" @bind-Value="registerModel.DepartmentId">
+                                    <option value="">-- No dept --</option>
+                                    @foreach (var dept in departments)
+                                    {
+                                        <option value="@dept.Id">@dept.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Role</label>
+                                <InputSelect class="form-select" @bind-Value="registerModel.Role">
+                                    <option value="Employee">Employee</option>
+                                    <option value="Manager">Manager</option>
+                                    <option value="HRManager">HR Manager</option>
+                                    @if (isAdmin)
+                                    {
+                                        <option value="Admin">Admin</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100 mt-3" disabled="@isLoading">
+                            @(isLoading ? "Creating..." : "Create Account")
+                        </button>
+                    </EditForm>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger mt-3">@errorMessage</div>
+                    }
+                    @if (!string.IsNullOrEmpty(successMessage))
+                    {
+                        <div class="alert alert-success mt-3">@successMessage</div>
+                    }
+
+                    <hr/>
+                    <div class="text-center">
+                        <p>Already have an account? <a href="login">Sign in here</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private RegisterModel registerModel = new();
+    private List<Employee> employees = new();
+    private List<Department> departments = new();
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private bool isLoading = false;
+    private bool isAdmin = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        employees = await DbContext.Employees.AsNoTracking().OrderBy(e => e.Name).ToListAsync();
+        departments = await DbContext.Departments.AsNoTracking().OrderBy(d => d.Name).ToListAsync();
+
+        // Check if current user is admin to allow Admin role creation
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        isAdmin = authState.User.IsInRole("Admin");
+    }
+
+    [Inject] private AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
+
+    private async Task HandleRegister()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+        try
+        {
+            var user = new User
+            {
+                UserName = registerModel.Email,
+                Email = registerModel.Email,
+                FullName = registerModel.FullName,
+                EmployeeId = string.IsNullOrEmpty(registerModel.EmployeeId) ? null : int.Parse(registerModel.EmployeeId),
+                DepartmentId = string.IsNullOrEmpty(registerModel.DepartmentId) ? null : int.Parse(registerModel.DepartmentId),
+                EmailConfirmed = true,
+                IsActive = true
+            };
+
+            var result = await UserManager.CreateAsync(user, registerModel.Password);
+            if (result.Succeeded)
+            {
+                await UserManager.AddToRoleAsync(user, registerModel.Role);
+                successMessage = $"Account for {user.Email} created as {registerModel.Role}! Redirecting to login...";
+                await Task.Delay(1500);
+                Navigation.NavigateTo("login", forceLoad: true);
+            }
+            else
+            {
+                errorMessage = string.Join(", ", result.Errors.Select(e => e.Description));
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally { isLoading = false; }
+    }
+
+    public class RegisterModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        public string FullName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(100, MinimumLength = 6)]
+        public string Password { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.Compare("Password")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+
+        public string? EmployeeId { get; set; }
+        public string? DepartmentId { get; set; }
+        public string Role { get; set; } = "Employee";
+    }
+}

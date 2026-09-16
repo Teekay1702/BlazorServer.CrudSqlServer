@@ -1,7 +1,273 @@
 ﻿@page "/"
+@using BlazorServer.CrudSqlServer.Services
+@using BlazorServer.CrudSqlServer.Models
+@rendermode InteractiveServer
+@inject EmployeeService employeeService
+@inject DepartmentService departmentService
+@inject SalaryService salaryService
+@inject LeaveService leaveService
+@inject AttendanceService attendanceService
+@inject PayrollService payrollService
 
-<PageTitle>Home</PageTitle>
+<PageTitle>HR Dashboard</PageTitle>
 
-<h1>Hello, Marvick Employees</h1>
+<AuthorizeView>
+    <Authorized>
+        <h1>HR Management System</h1>
+        <p class="text-muted">Welcome @context.User.Identity?.Name! Full HR suite - Employees, Departments, Salaries, Leave, Attendance & Payroll</p>
 
-Welcome to the Employee platform.
+        @if (isLoading)
+        {
+            <p><em>Loading dashboard...</em></p>
+        }
+        else
+        {
+            <div class="row g-3 mb-4">
+                <div class="col-md-2">
+                    <div class="card text-bg-primary h-100">
+                        <div class="card-body">
+                            <h6>Employees</h6>
+                            <h2>@totalEmployees</h2>
+                            <small>@activeEmployees active</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card text-bg-success h-100">
+                        <div class="card-body">
+                            <h6>Departments</h6>
+                            <h2>@totalDepartments</h2>
+                            <small>@unassignedCount unassigned</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card text-bg-warning h-100">
+                        <div class="card-body">
+                            <h6>Monthly Payroll</h6>
+                            <h5>@totalPayroll.ToString("C", culture)</h5>
+                            <small>@DateTime.Today.ToString("yyyy-MM")</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card text-bg-danger h-100">
+                        <div class="card-body">
+                            <h6>Pending Leave</h6>
+                            <h2>@pendingLeaves</h2>
+                            <small>@todayLeavesOnLeave on leave today</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card text-bg-info h-100">
+                        <div class="card-body">
+                            <h6>Today Attendance</h6>
+                            <h5>Present: @todayPresent</h5>
+                            <small>Late: @todayLate | Absent: @todayAbsent</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card text-bg-dark h-100">
+                        <div class="card-body">
+                            <h6>Quick Actions</h6>
+                            <div class="d-grid gap-1">
+                                <a href="employee" class="btn btn-sm btn-light">Employees</a>
+                                <a href="payrolls" class="btn btn-sm btn-light">Run Payroll</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-header">Employees by Department</div>
+                        <div class="card-body">
+                            <table class="table table-sm">
+                                <thead><tr><th>Department</th><th>Count</th><th>Payroll</th></tr></thead>
+                                <tbody>
+                                    @foreach (var dept in deptStats)
+                                    {
+                                        <tr>
+                                            <td>@dept.Name</td>
+                                            <td><span class="badge bg-primary">@dept.Count</span></td>
+                                            <td>@dept.Payroll.ToString("C", culture)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-header">Recent Hires & Pending Leave</div>
+                        <div class="card-body">
+                            <h6>Recent Hires</h6>
+                            @if (recentHires.Any())
+                            {
+                                <table class="table table-sm">
+                                    <tbody>
+                                        @foreach (var emp in recentHires)
+                                        {
+                                            <tr>
+                                                <td><span class="badge bg-dark">@emp.EmployeeCode</span></td>
+                                                <td>@emp.Name</td>
+                                                <td><small>@emp.HireDate.ToString("yyyy-MM-dd")</small></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+                            <hr />
+                            <h6>Pending Leave Requests</h6>
+                            @if (pendingLeaveList.Any())
+                            {
+                                <table class="table table-sm">
+                                    <tbody>
+                                        @foreach (var lr in pendingLeaveList.Take(5))
+                                        {
+                                            <tr>
+                                                <td>@lr.Employee.Name</td>
+                                                <td><span class="badge bg-info">@lr.LeaveType</span></td>
+                                                <td><small>@lr.StartDate.ToString("MM-dd") to @lr.EndDate.ToString("MM-dd") (@lr.TotalDays d)</small></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+                            else
+                            {
+
+                                <p class="text-muted small">No pending leaves.</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-header">Attendance & Payroll This Month</div>
+                        <div class="card-body">
+                            <h6>Attendance @DateTime.Today.ToString("yyyy-MM")</h6>
+                            <div class="d-flex gap-2 flex-wrap mb-3">
+                                @foreach (var kv in monthAttendanceStats)
+                                {
+                                    <span class="badge bg-light text-dark border">@kv.Key: @kv.Value</span>
+                                }
+                            </div>
+                            <h6>Payroll @filterYear-@filterMonth.ToString("D2")</h6>
+                            <table class="table table-sm">
+                                <thead><tr><th>Dept</th><th>Total</th></tr></thead>
+                                <tbody>
+                                    @foreach (var kv in payrollByDept)
+                                    {
+                                        <tr><td>@kv.Key</td><td>@kv.Value.ToString("C", culture)</td></tr>
+                                    }
+                                </tbody>
+                                <tfoot><tr><th>Total</th><th>@periodPayrollTotal.ToString("C", culture)</th></tr></tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <div class="container mt-5">
+            <div class="row justify-content-center">
+                <div class="col-md-8 text-center">
+                    <h1 class="display-4">HR Management System</h1>
+                    <p class="lead">Complete HR suite for Johannesburg - Employees, Payroll, Leave & Attendance</p>
+                    <div class="card mt-4">
+                        <div class="card-body">
+                            <h5>Please sign in to access the HR system</h5>
+                            <p class="text-muted">Secure access with role-based permissions: Admin, HR Manager, Manager, Employee</p>
+                            <div class="d-flex justify-content-center gap-3 mt-3">
+                                <a href="login" class="btn btn-primary btn-lg">Sign In</a>
+                                @* <a href="register" class="btn btn-outline-success btn-lg">Create Account</a> *@
+                            </div>
+                            <hr />
+                            <div class="row text-start mt-4">
+                                <div class="col-md-4"><h6>👥 Employees</h6><small>Manage employee records, departments, hire dates</small></div>
+                                <div class="col-md-4"><h6>💰 Payroll</h6><small>Monthly payroll generation, overtime, deductions</small></div>
+                                <div class="col-md-4"><h6>📅 Leave & Attendance</h6><small>Leave approval workflow, daily attendance tracking</small></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool isLoading = true;
+    private int totalEmployees = 0;
+    private int activeEmployees = 0;
+    private int totalDepartments = 0;
+    private int unassignedCount = 0;
+    private decimal totalPayroll = 0;
+    private int pendingLeaves = 0;
+    private int todayLeavesOnLeave = 0;
+    private int todayPresent = 0;
+    private int todayLate = 0;
+    private int todayAbsent = 0;
+    private List<DeptStat> deptStats = new();
+    private List<Employee> recentHires = new();
+    private List<LeaveRequest> pendingLeaveList = new();
+    private Dictionary<AttendanceStatus, int> monthAttendanceStats = new();
+    private Dictionary<string, decimal> payrollByDept = new();
+    private decimal periodPayrollTotal = 0;
+    private int filterYear = DateTime.Today.Year;
+    private int filterMonth = DateTime.Today.Month;
+    private System.Globalization.CultureInfo culture = new System.Globalization.CultureInfo("en-ZA");
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var employees = await employeeService.GetAll();
+            var departments = await departmentService.GetAll();
+            var payrollByDeptDict = await salaryService.GetPayrollByDepartment();
+            totalPayroll = await salaryService.GetTotalPayroll();
+            var allLeaves = await leaveService.GetAll();
+            var todayAttendance = await attendanceService.GetToday();
+            var monthStats = await attendanceService.GetStatsForMonth(filterYear, filterMonth);
+            payrollByDept = await payrollService.GetByDepartmentForPeriod(filterYear, filterMonth);
+            periodPayrollTotal = await payrollService.GetTotalForPeriod(filterYear, filterMonth);
+
+            totalEmployees = employees.Count;
+            activeEmployees = employees.Count(e => e.IsActive);
+            totalDepartments = departments.Count;
+            unassignedCount = employees.Count(e => e.DepartmentId == null);
+            pendingLeaves = allLeaves.Count(l => l.Status == LeaveStatus.Pending);
+            pendingLeaveList = allLeaves.Where(l => l.Status == LeaveStatus.Pending).OrderBy(l => l.StartDate).ToList();
+            todayLeavesOnLeave = allLeaves.Count(l => l.Status == LeaveStatus.Approved && l.StartDate.Date <= DateTime.Today && l.EndDate.Date >= DateTime.Today);
+            todayPresent = todayAttendance.Count(a => a.Status == AttendanceStatus.Present);
+            todayLate = todayAttendance.Count(a => a.Status == AttendanceStatus.Late);
+            todayAbsent = todayAttendance.Count(a => a.Status == AttendanceStatus.Absent);
+            monthAttendanceStats = monthStats;
+
+            deptStats = departments.Select(d => new DeptStat
+            {
+                Name = d.Name,
+                Count = employees.Count(e => e.DepartmentId == d.Id),
+                Payroll = payrollByDeptDict.ContainsKey(d.Name) ? payrollByDeptDict[d.Name] : 0
+            }).ToList();
+
+            if (unassignedCount > 0)
+            {
+                deptStats.Add(new DeptStat { Name = "Unassigned", Count = unassignedCount, Payroll = payrollByDeptDict.ContainsKey("Unassigned") ? payrollByDeptDict["Unassigned"] : 0 });
+            }
+
+            recentHires = employees.OrderByDescending(e => e.HireDate).Take(5).ToList();
+        }
+        catch { }
+        finally { isLoading = false; }
+    }
+
+    class DeptStat { public string Name { get; set; } = string.Empty; public int Count { get; set; } public decimal Payroll { get; set; } }
+}

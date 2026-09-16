@@ -1,0 +1,294 @@
+@page "/employee"
+@using BlazorServer.CrudSqlServer.Services
+@using BlazorServer.CrudSqlServer.Models
+@rendermode InteractiveServer
+@inject EmployeeService employeeService
+@inject DepartmentService departmentService
+
+<h3>Employee Management</h3>
+<p class="text-muted">HR System - Manage employees across departments</p>
+
+<div class="card mb-4">
+    <div class="card-header">
+        @(isEditing ? $"Edit Employee - {employee.EmployeeCode}" : "Add New Employee")
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Full Name *</label>
+                <input class="form-control" placeholder="Name" @bind="employee.Name" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Email *</label>
+                <input class="form-control" placeholder="Email" @bind="employee.Email" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Position *</label>
+                <input class="form-control" placeholder="Position" @bind="employee.Position" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Department</label>
+                <select class="form-select" @bind="employee.DepartmentId">
+                    <option value="">-- No Department --</option>
+                    @foreach (var dept in departments)
+                    {
+                        <option value="@dept.Id">@dept.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Hire Date</label>
+                <input type="date" class="form-control" @bind="employee.HireDate" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Employee Code</label>
+                <input class="form-control" placeholder="Auto-generated if blank" @bind="employee.EmployeeCode" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Status</label>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" @bind="employee.IsActive" id="isActiveCheck" />
+                    <label class="form-check-label" for="isActiveCheck">
+                        @(employee.IsActive ? "Active" : "Inactive")
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="mt-3">
+            @if (isEditing)
+            {
+                <button class="btn btn-primary me-2" @onclick="UpdateEmployee">Update</button>
+                <button class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
+            }
+            else
+            {
+                <button class="btn btn-success" @onclick="SaveEmployee" disabled="@(string.IsNullOrWhiteSpace(employee.Name) || string.IsNullOrWhiteSpace(employee.Email))">Save Employee</button>
+            }
+        </div>
+        @if (!string.IsNullOrEmpty(message))
+        {
+            <div class="alert @(isError ? "alert-danger" : "alert-success") mt-3">@message</div>
+        }
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h4>Employee List (@filteredEmployees.Count / @employees.Count)</h4>
+    <div class="d-flex gap-2">
+        <input class="form-control form-control-sm" placeholder="Search name/email/position" @bind="searchTerm" @bind:event="oninput" @bind:after="ApplyFilters" style="width:250px" />
+        <select class="form-select form-select-sm" @bind="filterDeptId" @bind:after="ApplyFilters" style="width:180px">
+            <option value="0">All Departments</option>
+            @foreach (var dept in departments)
+            {
+                <option value="@dept.Id">@dept.Name</option>
+            }
+        </select>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <p><em>Loading employees...</em></p>
+}
+else if (!filteredEmployees.Any())
+{
+    <div class="alert alert-info">No employees found. Add your first employee above or adjust filters.</div>
+}
+else
+{
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Position</th>
+                <th>Department</th>
+                <th>Hire Date</th>
+                <th>Status</th>
+                <th>Current Salary</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var emp in filteredEmployees)
+            {
+                <tr class="@(!emp.IsActive ? "table-secondary" : "")">
+                    <td><span class="badge bg-dark">@emp.EmployeeCode</span></td>
+                    <td><strong>@emp.Name</strong></td>
+                    <td>@emp.Email</td>
+                    <td>@emp.Position</td>
+                    <td>
+                        @if (emp.Department != null)
+                        {
+                            <span class="badge bg-primary">@emp.Department.Name</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-light text-dark">Unassigned</span>
+                        }
+                    </td>
+                    <td>@emp.HireDate.ToString("yyyy-MM-dd")</td>
+                    <td>
+                        @if (emp.IsActive)
+                        {
+                            <span class="badge bg-success">Active</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-danger">Inactive</span>
+                        }
+                    </td>
+                    <td>
+                        @{
+                            var current = emp.SalaryHistory.OrderByDescending(s => s.EffectiveFrom).FirstOrDefault(s => s.EffectiveTo == null || s.EffectiveTo > DateTime.UtcNow);
+                        }
+                        @if (current != null)
+                        {
+                            <span class="fw-bold">@current.NetSalary.ToString("C", culture)</span>
+                            <br/><small class="text-muted">@current.PayGrade</small>
+                        }
+                        else
+                        {
+                            <small class="text-muted">No salary</small>
+                        }
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => EditEmployee(emp)">Edit</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteEmployee(emp.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private Employee employee = new Employee() { HireDate = DateTime.UtcNow };
+    private List<Employee> employees = new();
+    private List<Employee> filteredEmployees = new();
+    private List<Department> departments = new();
+    private bool isEditing = false;
+    private bool isLoading = true;
+    private string message = string.Empty;
+    private bool isError = false;
+    private string searchTerm = string.Empty;
+    private int filterDeptId = 0;
+    private System.Globalization.CultureInfo culture = new System.Globalization.CultureInfo("en-ZA");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAll();
+    }
+
+    private async Task LoadAll()
+    {
+        isLoading = true;
+        try
+        {
+            departments = await departmentService.GetAll();
+            employees = await employeeService.GetAll();
+            filteredEmployees = employees;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        var query = employees.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.ToLower();
+            query = query.Where(e => e.Name.ToLower().Contains(term) || e.Email.ToLower().Contains(term) || e.Position.ToLower().Contains(term) || e.EmployeeCode.ToLower().Contains(term));
+        }
+        if (filterDeptId != 0)
+        {
+            query = query.Where(e => e.DepartmentId == filterDeptId);
+        }
+        filteredEmployees = query.ToList();
+    }
+
+    private async Task LoadEmployees()
+    {
+        employees = await employeeService.GetAll();
+        ApplyFilters();
+    }
+
+    private async Task SaveEmployee()
+    {
+        try
+        {
+            await employeeService.Add(employee);
+            message = $"Employee '{employee.Name}' saved as {employee.EmployeeCode}!";
+            isError = false;
+            employee = new Employee() { HireDate = DateTime.UtcNow };
+            await LoadEmployees();
+        }
+        catch (Exception ex)
+        {
+            message = $"Error: {ex.Message}";
+            isError = true;
+        }
+    }
+
+    private void EditEmployee(Employee emp)
+    {
+        employee = new Employee
+        {
+            Id = emp.Id,
+            Name = emp.Name,
+            Email = emp.Email,
+            Position = emp.Position,
+            DepartmentId = emp.DepartmentId,
+            HireDate = emp.HireDate,
+            IsActive = emp.IsActive,
+            EmployeeCode = emp.EmployeeCode
+        };
+        isEditing = true;
+        message = string.Empty;
+    }
+
+    private async Task UpdateEmployee()
+    {
+        try
+        {
+            await employeeService.Update(employee);
+            message = $"Employee '{employee.Name}' updated!";
+            isError = false;
+            employee = new Employee() { HireDate = DateTime.UtcNow };
+            isEditing = false;
+            await LoadEmployees();
+        }
+        catch (Exception ex)
+        {
+            message = $"Error: {ex.Message}";
+            isError = true;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        employee = new Employee() { HireDate = DateTime.UtcNow };
+        isEditing = false;
+        message = string.Empty;
+    }
+
+    private async Task DeleteEmployee(int id)
+    {
+        try
+        {
+            await employeeService.Delete(id);
+            message = "Employee deleted (salary history also removed).";
+            isError = false;
+            await LoadEmployees();
+        }
+        catch (Exception ex)
+        {
+            message = $"Error: {ex.Message}";
+            isError = true;
+        }
+    }
+}

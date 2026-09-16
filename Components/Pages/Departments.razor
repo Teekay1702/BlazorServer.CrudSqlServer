@@ -1,0 +1,178 @@
+@page "/departments"
+@using BlazorServer.CrudSqlServer.Services
+@using BlazorServer.CrudSqlServer.Models
+@rendermode InteractiveServer
+@inject DepartmentService departmentService
+
+<h3>Department Management</h3>
+<p class="text-muted">Organize your employees into departments - HR structure</p>
+
+<div class="card mb-4">
+    <div class="card-header">
+        @(isEditing ? "Edit Department" : "Add New Department")
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Department Name *</label>
+                <input class="form-control" placeholder="e.g. Information Technology" @bind="department.Name" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Description</label>
+                <input class="form-control" placeholder="Short description" @bind="department.Description" />
+            </div>
+        </div>
+        <div class="mt-3">
+            @if (isEditing)
+            {
+                <button class="btn btn-primary me-2" @onclick="UpdateDepartment">Update</button>
+                <button class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
+            }
+            else
+            {
+                <button class="btn btn-success" @onclick="SaveDepartment" disabled="@string.IsNullOrWhiteSpace(department.Name)">Save Department</button>
+            }
+        </div>
+        @if (!string.IsNullOrEmpty(message))
+        {
+            <div class="alert @(isError ? "alert-danger" : "alert-success") mt-3">@message</div>
+        }
+    </div>
+</div>
+
+<h4>Departments List (@departments.Count)</h4>
+
+@if (isLoading)
+{
+    <p><em>Loading...</em></p>
+}
+else if (!departments.Any())
+{
+    <div class="alert alert-info">No departments found. Add your first department above.</div>
+}
+else
+{
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Location</th>
+                <th>Employees</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var dept in departments)
+            {
+                <tr>
+                    <td><strong>@dept.Name</strong></td>
+                    <td>@dept.Description</td>
+                    <td><span class="badge bg-info">@dept.Employees.Count</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => EditDepartment(dept)">Edit</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteDepartment(dept.Id)" disabled="@(dept.Employees.Any())" title="@(dept.Employees.Any() ? "Cannot delete - has employees" : "Delete")">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private Department department = new Department();
+    private List<Department> departments = new();
+    private bool isEditing = false;
+    private bool isLoading = true;
+    private string message = string.Empty;
+    private bool isError = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDepartments();
+    }
+
+    private async Task LoadDepartments()
+    {
+        isLoading = true;
+        try
+        {
+            departments = await departmentService.GetAll();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveDepartment()
+    {
+        try
+        {
+            await departmentService.Add(department);
+            message = $"Department '{department.Name}' added successfully!";
+            isError = false;
+            department = new Department();
+            await LoadDepartments();
+        }
+        catch (Exception ex)
+        {
+            message = $"Error: {ex.Message}";
+            isError = true;
+        }
+    }
+
+    private void EditDepartment(Department dept)
+    {
+        department = new Department
+        {
+            Id = dept.Id,
+            Name = dept.Name,
+            Description = dept.Description,
+        };
+        isEditing = true;
+        message = string.Empty;
+    }
+
+    private async Task UpdateDepartment()
+    {
+        try
+        {
+            await departmentService.Update(department);
+            message = $"Department '{department.Name}' updated!";
+            isError = false;
+            department = new Department();
+            isEditing = false;
+            await LoadDepartments();
+        }
+        catch (Exception ex)
+        {
+            message = $"Error: {ex.Message}";
+            isError = true;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        department = new Department();
+        isEditing = false;
+        message = string.Empty;
+    }
+
+    private async Task DeleteDepartment(int id)
+    {
+        try
+        {
+            await departmentService.Delete(id);
+            message = "Department deleted.";
+            isError = false;
+            await LoadDepartments();
+        }
+        catch (Exception ex)
+        {
+            message = $"Error: {ex.Message}";
+            isError = true;
+        }
+    }
+}
